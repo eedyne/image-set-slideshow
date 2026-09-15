@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from tkinter.scrolledtext import ScrolledText
 
 from PIL import Image, ImageOps, ImageTk
 
@@ -89,12 +90,6 @@ def parse_groups(folder: Path) -> tuple[list[ImageGroup], list[str]]:
         numbered_paths = grouped[key]
         name = display_names[key]
         numbers = sorted(numbered_paths)
-
-        if not 3 <= len(numbers) <= 5:
-            issues.append(
-                f"'{name}' 묶음 제외: 이미지가 {len(numbers)}장입니다 (3~5장 필요)"
-            )
-            continue
 
         expected = list(range(1, len(numbers) + 1))
         if numbers != expected:
@@ -309,11 +304,9 @@ class SlideshowApp:
     def load_folder(self, folder: Path) -> None:
         groups, issues = parse_groups(folder)
         if not groups:
-            detail = "\n".join(issues[:12]) if issues else "지원되는 이미지가 없습니다."
-            messagebox.showerror(
+            self._show_issue_list(
                 "재생할 묶음이 없습니다",
-                "3~5장으로 구성되고 번호가 1부터 이어지는 묶음을 찾지 못했습니다.\n\n"
-                + detail,
+                issues or ["지원되는 이미지가 없습니다."],
             )
             return
 
@@ -339,14 +332,29 @@ class SlideshowApp:
     def _show_scan_issues(self) -> None:
         if not self.issues:
             return
-        shown = "\n".join(f"• {item}" for item in self.issues[:15])
-        remaining = len(self.issues) - 15
-        if remaining > 0:
-            shown += f"\n• 그 외 {remaining}개"
-        messagebox.showwarning(
-            "일부 파일을 제외했습니다",
-            "정상 묶음은 그대로 재생합니다.\n\n" + shown,
-        )
+        self._show_issue_list("일부 파일을 제외했습니다", self.issues)
+
+    def _show_issue_list(self, title: str, issues: list[str]) -> None:
+        window = tk.Toplevel(self.root)
+        window.title(title)
+        window.geometry("820x560")
+        window.minsize(480, 300)
+        window.configure(bg=PANEL)
+        window.transient(self.root)
+        ttk.Label(window, text=f"{title} · 전체 {len(issues)}건 (생략 없음)",
+                  style="Panel.TLabel", padding=12).pack(fill="x")
+        report = ScrolledText(window, wrap="word", font=("맑은 고딕", 10),
+                              bg=BACKGROUND, fg=TEXT, padx=12, pady=12)
+        report.pack(fill="both", expand=True, padx=12)
+        report.insert("1.0", "\n\n".join(
+            f"{index}. {issue}" for index, issue in enumerate(issues, 1)))
+        report.configure(state="disabled")
+        ttk.Button(window, text="닫기", command=window.destroy,
+                   style="Dark.TButton").pack(pady=12)
+        # Do not send report navigation keys to the slideshow's global bindings.
+        for sequence in ("<space>", "<Left>", "<Right>"):
+            window.bind(sequence, lambda event: "break")
+        window.bind("<Escape>", lambda event: window.destroy())
 
     def _start_new_cycle(self) -> None:
         previous_last = self.group_order[-1].name if self.group_order else None
