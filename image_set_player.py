@@ -125,11 +125,15 @@ def load_scaled_image(path: Path, target_width: int, target_height: int) -> Imag
     with Image.open(path) as source:
         source.seek(0)
         image = ImageOps.exif_transpose(source).convert("RGBA")
-        image.thumbnail(
-            (max(1, target_width), max(1, target_height)),
-            Image.Resampling.LANCZOS,
-            reducing_gap=3.0,
+        width, height = max(1, target_width), max(1, target_height)
+        scale = min(width / image.width, height / image.height)
+        fitted_size = (
+            min(width, max(1, round(image.width * scale))),
+            min(height, max(1, round(image.height * scale))),
         )
+        if image.size != fitted_size:
+            image = image.resize(fitted_size, Image.Resampling.LANCZOS,
+                                 reducing_gap=3.0)
         background = Image.new("RGB", image.size, BACKGROUND)
         background.paste(image, mask=image.getchannel("A"))
         return background
